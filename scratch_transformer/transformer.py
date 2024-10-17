@@ -19,6 +19,8 @@ with open('meta_goer.txt','r',encoding='gb2312', errors='ignore') as f:
 # raise Exception("pause")
 
 ## process 
+text = [ch for ch in text if ch != ' ' and ch != '\n']
+
 ### make vocab_table 
 tokens = sorted(list(set(text)))
 stoi = {token:i for i,token in enumerate(tokens)}
@@ -43,9 +45,9 @@ val_data = data[n:]
 head_num = 8
 hidden_dim = 64
 vocab_size = len(tokens)
-seq_len = 64
+seq_len = 256
 batch_size = 8
-decoder_num = 1
+decoder_num = 6
 eval_iters = 200
 learning_rate = 1e-4
 epochs = 5000
@@ -243,5 +245,5 @@ for epoch in range(epochs):
 
 torch.save(model,'gpt_500k.pth')
 
-context = torch.zeros((1, 1), dtype=torch.long, device=device)
-print(decode(model.generate(context, max_new_tokens=2000)[0].tolist()))
+context = torch.zeros((1, 1), dtype=torch.long)
+print(''.join(decode(model.generate(context, max_new_tokens=2000)[0].tolist())))
