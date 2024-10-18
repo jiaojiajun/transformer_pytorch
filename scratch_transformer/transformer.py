@@ -43,23 +43,24 @@ val_data = data[n:]
 
 # hyper parameter
 head_num = 8
-hidden_dim = 64
+hidden_dim = 512
 vocab_size = len(tokens)
-seq_len = 256
-batch_size = 8
-decoder_num = 6
+seq_len = 512
+batch_size = 16
+decoder_num = 12
 eval_iters = 200
 learning_rate = 1e-4
-epochs = 5000
+epochs = 10000
 eval_internal = 100
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 # print(vocab_size)
 
 def get_batch(data_type):
     data = train_data if data_type == 'train' else val_data 
     rand_start = torch.randint(len(data)- seq_len,(batch_size,))
-    x = torch.stack([data[i:i+seq_len] for i in rand_start] )
-    y = torch.stack([data[i+1:i+seq_len+1] for i in rand_start])
+    x = torch.stack([data[i:i+seq_len] for i in rand_start] ).to(device)
+    y = torch.stack([data[i+1:i+seq_len+1] for i in rand_start]).to(device)
     return x, y 
 
 ## test get batch method
@@ -75,7 +76,7 @@ def get_mean_loss():
         losses = torch.zeros(eval_iters)
         for i in range(eval_iters):
             X, Y = get_batch(data_type)
-            logis, loss = model(X,Y)
+            logits, loss = model(X,Y)
             losses[i] = loss.item()
         loss_out[data_type] = losses.mean()
     model.train()
@@ -111,12 +112,12 @@ class MultiHeadAttention(nn.Module):
         attention_weight = q @ k.transpose(-2,-1) /torch.sqrt(torch.tensor(self.head_dim))
         # mask
         if mask is not None:
-            mask = mask.tril()
+            mask = mask.tril().to(device)
             attention_weight = attention_weight.masked_fill(
                 mask == 0,float("-inf")
             )
         else:
-            mask = torch.tril(torch.ones(seq_len, seq_len)).unsqueeze(0).unsqueeze(1).repeat(batch_size,self.head_num,1,1)
+            mask = torch.tril(torch.ones(seq_len, seq_len)).unsqueeze(0).unsqueeze(1).repeat(batch_size,self.head_num,1,1).to(device)
             # print(mask.shape)
             # print(attention_weight.shape)
             attention_weight = attention_weight.masked_fill(
@@ -184,7 +185,7 @@ class LLM(nn.Module):
         # inputs size (batch_size, seq_len)
         batch_size, seq_len = inputs.size()
         vocab = self.vocab_embedding(inputs)
-        position = self.position_embedding(torch.arange(seq_len))
+        position = self.position_embedding(torch.arange(seq_len,device=device))
         embedding = vocab + position 
         x = self.decoders(embedding)
         x = self.ln(x)
@@ -215,7 +216,7 @@ class LLM(nn.Module):
             inputs = torch.cat((inputs, output_token), dim=1)
         return inputs
 
-model = LLM()
+model = LLM().cuda()
 # print(model)
 
 # for name, param in model.parameters():
@@ -234,8 +235,8 @@ for epoch in range(epochs):
         loss = get_mean_loss()
         print(f"epoch: {epoch}, train loss: {loss['train']:.4f}, val loss: {loss['validate']:.4f}")
         
-        if epoch >=4000:
-            torch.save(model,f"./models/gpt_500k-{epoch}.pth")
+        # if epoch >=4000:
+        #     torch.save(model,f"./models/gpt_500k-{epoch}.pth")
     
     x_batch, y_batch = get_batch('train')
     logits, loss = model(x_batch, y_batch)
@@ -245,5 +246,5 @@ for epoch in range(epochs):
 
 torch.save(model,'gpt_500k.pth')
 
-context = torch.zeros((1, 1), dtype=torch.long)
+context = torch.zeros((1, 1), dtype=torch.long).to(device)
 print(''.join(decode(model.generate(context, max_new_tokens=2000)[0].tolist())))
