@@ -43,11 +43,11 @@ val_data = data[n:]
 
 # hyper parameter
 head_num = 8
-hidden_dim = 64
+hidden_dim = 256
 vocab_size = len(tokens)
 seq_len = 256
-batch_size = 8
-decoder_num = 6
+batch_size = 4
+decoder_num = 16
 eval_iters = 200
 learning_rate = 1e-4
 epochs = 5000
@@ -234,8 +234,8 @@ for epoch in range(epochs):
         loss = get_mean_loss()
         print(f"epoch: {epoch}, train loss: {loss['train']:.4f}, val loss: {loss['validate']:.4f}")
         
-        if epoch >=4000:
-            torch.save(model,f"./models/gpt_500k-{epoch}.pth")
+        # if epoch >=4000:
+        #     torch.save(model,f"./models/gpt_500k-{epoch}.pth")
     
     x_batch, y_batch = get_batch('train')
     logits, loss = model(x_batch, y_batch)
