@@ -1,4 +1,4 @@
 *.txt
 *.pth
 *.pt
-Llama*
+llamav2_scratch/Llama-2-7b
