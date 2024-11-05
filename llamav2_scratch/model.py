@@ -56,7 +56,7 @@ class Transformer(nn.Module):
 
         self.freqs_complex = precompute_theta_pos_frequencies(self.args.dim // self.args.n_heads, self.args.max_seq_len * 2, device=self.args.device)#todo parameter to add
 
-    def forward(self, tokens:torch.Tensor, start_pos:int, freqs_complex:torch.Tensor):
+    def forward(self, tokens:torch.Tensor, start_pos:int):
         batch_size, seq_len = tokens.shape
         assert seq_len == 1, "only one token can be processed at the same time"
 
@@ -123,7 +123,7 @@ class SelfAttention(nn.Module):
         super().__init__()
         
         ## multi head and group query 
-        self.n_kv_heads = args.n_kv_heads
+        self.n_kv_heads = args.n_heads if args.n_kv_heads is None else args.n_kv_heads
         self.n_heads = args.n_heads
         # how many times should kv repeat 
         self.n_rep = self.n_heads // self.n_kv_heads
@@ -149,15 +149,15 @@ class SelfAttention(nn.Module):
 
         # view q k v
         # (batch_size, seq_len, dim) ->(batch_size, seq_len, n_heads, head_dim)
-        xq =xq.view(batch_size, seq_len, -1, self.head_dim)
+        xq = xq.view(batch_size, seq_len, -1, self.head_dim)
         # (batch_size, seq_len, dim) ->(batch_size, seq_len, n_kv_heads, head_dim)
         xk = xk.view(batch_size, seq_len, -1, self.head_dim)
         xv = xv.view(batch_size, seq_len, -1, self.head_dim)
 
         ## apply rotary position encoding 
         # in this step, size won't change 
-        xq = apply_rotary_encoding(xq, freqs_complex)
-        xk = apply_rotary_encoding(xk, freqs_complex)
+        xq = apply_rotary_encoding(xq, freqs_complex,device=x.device)
+        xk = apply_rotary_encoding(xk, freqs_complex, device=x.device)
 
         ## save current k, v in cache
         self.cache_k[:batch_size, start_pos:start_pos+seq_len] = xk
@@ -175,10 +175,10 @@ class SelfAttention(nn.Module):
         # (batch_size, seq_len, n_heads, head_dim)->(batch_size,n_heads,seq_len,head_dim)
         xq = xq.transpose(1,2)
         # (batch_size, start_pos+seq_len, n_kv_heads, head_dim) -> (batch_size, n_kv_heads, start_pos+seq_len, head_dim)
-        keys = keys.transpose(1,2)
-        values = values.transpose(1,2)
+        keys = keys.transpose(1,2).to(x.device)
+        values = values.transpose(1,2).to(x.device)
 
-        attention_score = xq @ keys.transpose(-2,-1) / torch.sqrt(torch.tensor(dim))
+        attention_score = xq @ keys.transpose(-2,-1) / math.sqrt(self.head_dim)
         attention_score = F.softmax(attention_score.float(), dim=-1).type_as(xq)
         output = attention_score @ values
 
@@ -204,9 +204,9 @@ class FeedForward(nn.Module):
         self.w2 = nn.Linear(hidden_dim, args.dim, bias=False)
         self.w3 = nn.Linear(args.dim, hidden_dim, bias=False)
     def forward(self, x: torch.Tensor):
-        swish = self.w1(x)
+        swish = F.silu(self.w1(x))
         xV = self.w3(x)
-        x = swish + xV
+        x = swish * xV
         return self.w2(x)
 
 # 梳理一下现在还剩什么没有实现

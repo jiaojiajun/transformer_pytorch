@@ -1,6 +1,6 @@
 import torch
 import time
-from typing import Optional 
+from typing import Optional, List 
 from pathlib import Path
 import json
 from sentencepiece import SentencePieceProcessor
@@ -50,7 +50,7 @@ class LLaMa:
             print(f"loaded state dict in {  time.time() - prev_time:.2f}s")
         return LLaMa(model, tokenizer, model_args)
     
-    def text_completion(self, prompts:list[str], device:str, temperature:float=0.6, top_p=0.9, max_gen_len:Optional[int]=None,):
+    def text_completion(self, prompts:List[str], device:str, temperature:float=0.6, top_p=0.9, max_gen_len:Optional[int]=None):
         if max_gen_len is None:
             max_gen_len = self.args.max_seq_len -1
         prompts_tokens = [self.tokenizer.encode(prompt, out_type=int, add_bos=True, add_eos=False) for prompt in prompts ]
@@ -76,8 +76,9 @@ class LLaMa:
                 next_token = self._sample_top_p(probs,top_p)
             else:
                 next_token = torch.argmax(logits[:,-1], dim=-1)
+            next_token = next_token.reshape(-1)
             next_token = torch.where(prompt_tokens_mask[:,cur_pos], tokens[:, cur_pos], next_token)
-            tokens[:cur_pos] = next_token
+            tokens[:, cur_pos] = next_token
 
             eos_reached |= (~prompt_tokens_mask[:, cur_pos]) &(next_token == self.tokenizer.eos_id)
             if all(eos_reached):
@@ -105,35 +106,33 @@ class LLaMa:
 if __name__ == "__main__":
     torch.manual_seed(0)
     
-    all_cuda = False
-    device = "cuda" if torch.cuda.is_available() and all_cuda else "cpu"
+    allow_cuda = True  
+    device = "cuda" if torch.cuda.is_available() and allow_cuda else "cpu"
 
 
     prompts = [
-        "the capital of china is ",
-        "the capital of usa is ",
-        "the rpc is ",
-        # Few shot promt
-        """Translate English to French:
+        "Llama 2 is a collection of pretrained and fine-tuned generative text models ranging in scale from ",
+        # "the capital of usa is ",
+        # "the rpc is ",
+        # # Few shot promt
+        # """Translate English to French:
         
-        sea otter => loutre de mer
-        peppermint => menthe poivrée
-        plush girafe => girafe peluche
-        cheese =>""",
-        # Zero shot prompt
-        """Tell me if the following person is actually Doraemon disguised as human:
-        Name: march json
-        Decision: """
+        # sea otter => loutre de mer
+        # peppermint => menthe poivrée
+        # plush girafe => girafe peluche
+        # cheese =>""",
+        # # Zero shot prompt
+        # """Tell me if the following person is actually Doraemon disguised as human:
+        # Name: march json
+        # Decision: """
     ]
     model = LLaMa.build('Llama-2-7b/',
                         tokenizer_path='Llama-2-7b/tokenizer.model',
                         load_model=True,
                         max_seq_len=1024,
-                        max_batch_size=1024,
+                        max_batch_size=2,
                         device=device
                         )
-    out_tokens, out_text  = model.text_completion(prompts,max_gen_len=200, device=device)
+    out_tokens, out_text  = model.text_completion(prompts,max_gen_len=100, device=device)
     assert len(out_text) == len(prompts)
-    for i in range(out_text):
-        print(f'{out_text[i]}')
-        print("end")
+    print(out_text)
